@@ -9,33 +9,31 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
-# Cargar el dataset
+
 df = pd.read_csv('DATASET_REGISTRO_CONSUMO_COMBUSTIBLE_FLOTA_VEH_MPPAITA.csv')
 
-# Limpiar las columnas numéricas, eliminando las comas y convirtiendo a float
+
 df['KM_RECORRIDO_MENSUAL'] = df['KM_RECORRIDO_MENSUAL'].astype(str).str.replace(',', '').astype(float)
 df['COSTO_UNI_COMBUSTIBLE'] = df['COSTO_UNI_COMBUSTIBLE'].astype(str).str.replace(',', '').astype(float)
 df['COSTO_MENSUAL_CONSUMO'] = df['COSTO_MENSUAL_CONSUMO'].astype(str).str.replace(',', '').astype(float)
 
-# Verificar valores nulos
+
 print("Valores nulos en el dataset:\n", df.isnull().sum())
 
-# Imputar o eliminar valores nulos si existen
+
 df = df.dropna(subset=["KM_RECORRIDO_MENSUAL", "TIPO_COMBUSTIBLE", "NUM_DIAS_RECORRIDO", "COSTO_UNI_COMBUSTIBLE", "COSTO_MENSUAL_CONSUMO"])
 
-# Selección de las variables
+
 X = df[["KM_RECORRIDO_MENSUAL", "TIPO_COMBUSTIBLE", "NUM_DIAS_RECORRIDO", "COSTO_UNI_COMBUSTIBLE"]]
 y = df["COSTO_MENSUAL_CONSUMO"]
 
-# Preprocesamiento de datos
-# Se usa OneHotEncoder para las variables categóricas (TIPO_COMBUSTIBLE)
 preprocessor = ColumnTransformer(
     transformers=[
         ('cat', OneHotEncoder(), ['TIPO_COMBUSTIBLE']),
         ('num', 'passthrough', ['KM_RECORRIDO_MENSUAL', 'NUM_DIAS_RECORRIDO', 'COSTO_UNI_COMBUSTIBLE'])
     ])
 
-# Definir el modelo Random Forest
+
 modelo = Pipeline(steps=[
     ('preprocessor', preprocessor),
     ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
@@ -44,7 +42,6 @@ modelo = Pipeline(steps=[
 # =========================
 # 1. EVALUACIÓN DE MODELO CON VALIDACIÓN CRUZADA
 # =========================
-# Evaluación de la capacidad de generalización mediante validación cruzada (5 pliegues)
 try:
     scores = cross_val_score(modelo, X, y, cv=5, scoring='r2')
     plt.figure(figsize=(6, 4))
@@ -81,7 +78,7 @@ except ValueError as e:
 # 3. CUANTIFICACIÓN DE INCERTIDUMBRE
 # =========================
 try:
-    # Cuantificación de incertidumbre usando bootstrap
+    
     n_iter = 100
     predicciones_bootstrap = []
 
@@ -97,7 +94,7 @@ try:
     y_pred_mean = pred_array.mean(axis=0)
     y_pred_std = pred_array.std(axis=0)
 
-    # Gráfico de incertidumbre
+    
     plt.figure(figsize=(8, 5))
     plt.hist(y_pred_std, bins=30, color='orange', edgecolor='black')
     plt.xlabel("Desviación estándar de la predicción (±)")
@@ -126,7 +123,7 @@ try:
         mse_scores.append(mse)
         folds.append(f"Fold {i}")
 
-    # Gráfico de MSE por fold
+  
     plt.figure(figsize=(6, 4))
     plt.plot(folds, mse_scores, marker='o', linestyle='-', color='green')
     plt.axhline(np.mean(mse_scores), color='red', linestyle='--', label=f"Promedio MSE = {np.mean(mse_scores):.2f}")
