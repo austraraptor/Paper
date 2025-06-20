@@ -18,20 +18,17 @@ df['COSTO_UNI_COMBUSTIBLE'] = df['COSTO_UNI_COMBUSTIBLE'].astype(str).str.replac
 df['COSTO_MENSUAL_CONSUMO'] = df['COSTO_MENSUAL_CONSUMO'].astype(str).str.replace(',', '').astype(float)
 
 
-print("Valores nulos en el dataset:\n", df.isnull().sum())
-
-
 df = df.dropna(subset=["KM_RECORRIDO_MENSUAL", "TIPO_COMBUSTIBLE", "NUM_DIAS_RECORRIDO", "COSTO_UNI_COMBUSTIBLE", "COSTO_MENSUAL_CONSUMO"])
 
 
 X = df[["KM_RECORRIDO_MENSUAL", "TIPO_COMBUSTIBLE", "NUM_DIAS_RECORRIDO", "COSTO_UNI_COMBUSTIBLE"]]
 y = df["COSTO_MENSUAL_CONSUMO"]
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('cat', OneHotEncoder(), ['TIPO_COMBUSTIBLE']),
-        ('num', 'passthrough', ['KM_RECORRIDO_MENSUAL', 'NUM_DIAS_RECORRIDO', 'COSTO_UNI_COMBUSTIBLE'])
-    ])
+
+preprocessor = ColumnTransformer([
+    ('cat', OneHotEncoder(), ['TIPO_COMBUSTIBLE']),
+    ('num', 'passthrough', ['KM_RECORRIDO_MENSUAL', 'NUM_DIAS_RECORRIDO', 'COSTO_UNI_COMBUSTIBLE'])
+])
 
 
 modelo = Pipeline(steps=[
@@ -39,11 +36,15 @@ modelo = Pipeline(steps=[
     ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
 ])
 
-# =========================
-# 1. EVALUACIÓN DE MODELO CON VALIDACIÓN CRUZADA
-# =========================
+# ========== 1. VALIDACIÓN CRUZADA R² ==========
 try:
     scores = cross_val_score(modelo, X, y, cv=5, scoring='r2')
+
+    print("\n=== RESULTADOS R² VALIDACIÓN CRUZADA (5 FOLDS) ===")
+    for i, score in enumerate(scores, start=1):
+        print(f"Fold {i}: R² = {score:.4f}")
+    print(f"R² promedio: {np.mean(scores):.4f}")
+
     plt.figure(figsize=(6, 4))
     plt.bar(range(1, 6), scores, color='skyblue')
     plt.axhline(np.mean(scores), color='red', linestyle='--', label=f"Promedio R² = {np.mean(scores):.2f}")
@@ -56,12 +57,16 @@ try:
 except ValueError as e:
     print("Error en la validación cruzada:", e)
 
-# =========================
-# 2. PREDICCIÓN Y DIAGRAMA DE DISPERSIÓN
-# =========================
+# ========== 2. REAL VS. PREDICHO ==========
 try:
     modelo.fit(X, y)
     y_pred = modelo.predict(X)
+
+    print("\n=== RESULTADOS REAL VS. PREDICHO ===")
+    errores = y - y_pred
+    print(f"Error absoluto medio (MAE): {np.mean(np.abs(errores)):.2f}")
+    print(f"Error cuadrático medio (MSE): {mean_squared_error(y, y_pred):,.2f}")
+    print(f"Coeficiente de determinación (R²): {r2_score(y, y_pred):.4f}")
 
     plt.figure(figsize=(8, 6))
     sns.scatterplot(x=y, y=y_pred)
@@ -70,15 +75,13 @@ try:
     plt.ylabel("Consumo predicho (soles)")
     plt.title("Dispersión: Consumo real vs. predicho (modelo Random Forest)")
     plt.grid(True)
+    plt.tight_layout()
     plt.show()
 except ValueError as e:
     print("Error en el ajuste del modelo:", e)
 
-# =========================
-# 3. CUANTIFICACIÓN DE INCERTIDUMBRE
-# =========================
+# ========== 3. INCERTIDUMBRE BOOTSTRAP ==========
 try:
-    
     n_iter = 100
     predicciones_bootstrap = []
 
@@ -91,10 +94,15 @@ try:
         predicciones_bootstrap.append(pred)
 
     pred_array = np.array(predicciones_bootstrap)
-    y_pred_mean = pred_array.mean(axis=0)
     y_pred_std = pred_array.std(axis=0)
 
-    
+    print("\n=== RESULTADOS INCERTIDUMBRE (BOOTSTRAP) ===")
+    print(f"Desviación estándar media: ±{np.mean(y_pred_std):.2f}")
+    print(f"Desviación estándar mínima: ±{np.min(y_pred_std):.2f}")
+    print(f"Desviación estándar máxima: ±{np.max(y_pred_std):.2f}")
+    print(f"Percentil 25 (P25): ±{np.percentile(y_pred_std, 25):.2f}")
+    print(f"Percentil 75 (P75): ±{np.percentile(y_pred_std, 75):.2f}")
+
     plt.figure(figsize=(8, 5))
     plt.hist(y_pred_std, bins=30, color='orange', edgecolor='black')
     plt.xlabel("Desviación estándar de la predicción (±)")
@@ -106,9 +114,7 @@ try:
 except ValueError as e:
     print("Error en la cuantificación de incertidumbre:", e)
 
-# =========================
-# 4. VALIDACIÓN CON K-FOLD
-# =========================
+# ========== 4. VALIDACIÓN K-FOLD MSE ==========
 try:
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     mse_scores = []
@@ -123,15 +129,22 @@ try:
         mse_scores.append(mse)
         folds.append(f"Fold {i}")
 
-  
+    mse_promedio = np.mean(mse_scores)
+
+    print("\n=== RESULTADOS MSE VALIDACIÓN K-FOLD ===")
+    for f, mse in zip(folds, mse_scores):
+        print(f"{f}: MSE = {mse:,.2f} Soles²")
+    print(f"MSE promedio (5-Fold): {mse_promedio:,.2f} Soles²")
+
     plt.figure(figsize=(6, 4))
     plt.plot(folds, mse_scores, marker='o', linestyle='-', color='green')
-    plt.axhline(np.mean(mse_scores), color='red', linestyle='--', label=f"Promedio MSE = {np.mean(mse_scores):.2f}")
+    plt.axhline(mse_promedio, color='red', linestyle='--', label=f"Promedio MSE = {mse_promedio:,.2f}")
     plt.xlabel("Fold")
     plt.ylabel("Error cuadrático medio (MSE)")
-    plt.title("Validación K-Fold: Error por fold")
+    plt.title(f"Validación K-Fold: MSE por fold\n(MSE promedio = {mse_promedio:,.2f} Soles²)")
     plt.legend()
     plt.tight_layout()
+    plt.grid(True)
     plt.show()
 except ValueError as e:
     print("Error en la validación K-Fold:", e)
